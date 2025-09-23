@@ -1,0 +1,435 @@
+rm(list = ls())
+# Pacchetti ----------------------------------------------------------------
+packages <- c("vars","tidyr","dplyr","ggplot2","zoo","readxl","seasonal")
+for (pkg in packages) {
+if (!requireNamespace(pkg, quietly = TRUE)) {
+install.packages(pkg)
+}
+library(pkg, character.only = TRUE)
+}
+# INFLAZIONE --------------------------------------------------------------
+inflation <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/inflation.xlsx", "Annual")
+inflation <- inflation %>% select("observation_date", "FPCPITOTLZGITA")
+names(inflation) <- c("time", "inflation")
+inflation$time <- as.yearqtr(format(inflation$time, "%Y"), format = "%Y")
+inflation$inflation <- as.numeric(inflation$inflation)
+inflation <- na.omit(inflation)
+# DISOCCUPAZIONE ----------------------------------------------------------
+unemployment <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/unemployment rate.xlsx", "Annual")
+unemployment <- unemployment %>% select("observation_date", "LRHUTTTTITA156S")
+names(unemployment) <- c("time", "unemployment")
+unemployment$time <- as.yearqtr(format(unemployment$time, "%Y"), format = "%Y")
+unemployment$unemployment <- as.numeric(unemployment$unemployment)
+unemployment <- na.omit(unemployment)
+# TASSO DI INTERESSE ------------------------------------------------------
+intrate <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/int rates.xlsx", "Annual")
+intrate <- intrate %>% select("observation_date", "IRLTLT01ITM156N")
+names(intrate) <- c("time", "intrate")
+intrate$time <- as.yearqtr(format(intrate$time, "%Y"), format = "%Y")
+intrate$intrate <- as.numeric(intrate$intrate)
+intrate <- na.omit(intrate)
+# MERGE DATI --------------------------------------------------------------
+df_list <- list(inflation, unemployment, intrate)
+data <- Reduce(function(x, y) merge(x, y, by = "time", all = TRUE), df_list)
+# FILTRA PER ANNI COMPLETI ------------------------------------------------
+data <- data %>% filter(time >= as.yearqtr("1995 Q1") & time <= as.yearqtr("2023 Q1"))
+# GRAFICO SERIE TEMPORALI -------------------------------------------------
+data_long <- pivot_longer(data, cols = -time, names_to = "Variabile", values_to = "Valore")
+ggplot(data_long, aes(x = time, y = Valore, color = Variabile)) +
+geom_line(size = 1) +
+scale_x_yearqtr(format = "%Y", n = 10) +
+labs(title = "Inflazione, Disoccupazione, Tasso d'interesse",
+x = "Anno", y = "Valore (%)") +
+theme_minimal() +
+theme(legend.position = "bottom")
+var_data <- data %>% select(inflation, unemployment, intrate)
+var_data <- na.omit(var_data)
+# Selezione del numero di lag
+lag_selection <- VARselect(var_data, lag.max = 6, type = "const")
+print(lag_selection$selection)
+# Stima del VAR (usa il numero di lag suggerito da AIC o SC)
+var_model <- VAR(var_data, p = 2, type = "const")
+summary(var_model)
+# IRF ---------------------------------------------------------------------
+# Effetto di uno shock nei tassi su inflazione e disoccupazione
+irf_infl <- irf(var_model, impulse = "intrate", response = "inflation",
+n.ahead = 10, boot = TRUE, ci = 0.95)
+plot(irf_infl)
+irf_unemp <- irf(var_model, impulse = "intrate", response = "unemployment",
+n.ahead = 10, boot = TRUE, ci = 0.95)
+plot(irf_unemp)
+rm(list = ls())
+packages <- c("vars","tidyr","dplyr","ggplot2","mFilter","zoo","seasonal","readxl")
+for (pkg in packages) {
+if (!requireNamespace(pkg, quietly = TRUE)) {
+install.packages(pkg)
+}
+library(pkg, character.only = TRUE)
+}
+# INFLAZIONE -------------------------------------------------------------
+inflation <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/inflation.xlsx","Annual")
+inflation <- inflation %>% select("observation_date", "FPCPITOTLZGITA")
+names(inflation) <- c("time", "inflation")
+inflation$time <- as.yearqtr(inflation$time, format = "%Y-%m-%d")
+inflation$inflation <- as.numeric(inflation$inflation)
+inflation <- na.omit(inflation)
+ggplot(inflation, aes(x = time, y = inflation)) +
+scale_x_yearqtr(n = 10, format = "%Y") +
+rm(list = ls())
+packages <- c("vars","tidyr","dplyr","ggplot2","mFilter","zoo","seasonal","readxl")
+for (pkg in packages) {
+if (!requireNamespace(pkg, quietly = TRUE)) {
+install.packages(pkg)
+}
+library(pkg, character.only = TRUE)
+}
+# INFLAZIONE -------------------------------------------------------------
+inflation <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/inflation.xlsx","Annual")
+inflation <- inflation %>% select("observation_date", "FPCPITOTLZGITA")
+names(inflation) <- c("time", "inflation")
+inflation$time <- as.yearqtr(inflation$time, format = "%Y-%m-%d")
+inflation$inflation <- as.numeric(inflation$inflation)
+inflation <- na.omit(inflation)
+ggplot(inflation, aes(x = time, y = inflation)) +
+geom_line(size = 1) +
+scale_x_yearqtr(n = 10, format = "%Y") +
+labs(title = "Inflazione", x = "Anno", y = "% annuo") +
+theme_minimal()
+# DISOCCUPAZIONE ---------------------------------------------------------
+unemployment <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/unemployment rate.xlsx","Annual")
+unemployment <- unemployment %>% select("observation_date", "LRHUTTTTITA156S")
+names(unemployment) <- c("time", "unemployment")
+unemployment$time <- as.yearqtr(unemployment$time, format = "%Y-%m-%d")
+unemployment$unemployment <- as.numeric(unemployment$unemployment)
+unemployment <- na.omit(unemployment)
+ggplot(unemployment, aes(x = time, y = unemployment)) +
+geom_line(size = 1) +
+scale_x_yearqtr(n = 10, format = "%Y") +
+labs(title = "Disoccupazione", x = "Anno", y = "% forza lavoro") +
+theme_minimal()
+# TASSO DI INTERESSE -----------------------------------------------------
+intrate <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/int rates.xlsx","Annual")
+intrate <- intrate %>% select("observation_date", "IRLTLT01ITM156N")
+names(intrate) <- c("time", "intrate")
+intrate$time <- as.yearqtr(intrate$time, format = "%Y-%m-%d")
+intrate$intrate <- as.numeric(intrate$intrate)
+intrate <- na.omit(intrate)
+ggplot(intrate, aes(x = time, y = intrate)) +
+geom_line(size = 1) +
+scale_x_yearqtr(n = 10, format = "%Y") +
+labs(title = "Tasso di Interesse", x = "Anno", y = "%") +
+theme_minimal()
+# MERGE DATI -------------------------------------------------------------
+df_list <- list(inflation, unemployment, intrate)
+data <- Reduce(function(x, y) merge(x, y, by = "time", all = TRUE), df_list)
+data <- data %>%
+filter(time >= as.yearqtr("1995 Q1") & time <= as.yearqtr("2023 Q1"))
+var_data <- data %>% select(inflation, unemployment, intrate)
+lag_selection <- VARselect(var_data, lag.max = 8, type = "const")
+print(lag_selection$selection)
+var_model <- VAR(var_data, p = 2, type = "const")  # cambia p se AIC/BIC suggerisce altro
+summary(var_model)
+# IRF --------------------------------------------------------------------
+infl_irf <- irf(var_model, impulse = "intrate", response = "inflation",
+n.ahead = 10, ortho = TRUE, boot = TRUE, ci = 0.90)
+plot(infl_irf)
+unemp_irf <- irf(var_model, impulse = "intrate", response = "unemployment",
+n.ahead = 10, ortho = TRUE, boot = TRUE, ci = 0.90)
+plot(unemp_irf)
+int_irf <- irf(var_model, impulse = "intrate", response = "intrate",
+n.ahead = 10, ortho = TRUE, boot = TRUE, ci = 0.90)
+plot(int_irf)
+# CURVA DI PHILLIPS ------------------------------------------------------
+ggplot(data, aes(x = unemployment, y = inflation)) +
+geom_point(color = "steelblue", size = 2) +
+geom_smooth(method = "lm", se = FALSE, color = "darkred") +
+labs(title = "Curva di Phillips",
+x = "Tasso di Disoccupazione (%)",
+y = "Inflazione (%)") +
+theme_minimal()
+# TAYLOR RULE ------------------------------------------------------------
+# Aggiungi nel dataset
+data <- data %>%
+mutate(taylor_rate = 2 + inflation + 0.5 * (inflation - 2) - 0.5 * (unemployment - 8))
+# Grafico comparativo
+ggplot(data, aes(x = time)) +
+geom_line(aes(y = intrate, color = "Tasso Effettivo"), size = 1) +
+geom_line(aes(y = taylor_rate, color = "Tasso secondo Taylor"), size = 1, linetype = "dashed") +
+labs(title = "Tasso d'interesse effettivo vs Taylor Rule",
+x = "Anno", y = "%") +
+scale_color_manual(values = c("Tasso Effettivo" = "steelblue", "Tasso secondo Taylor" = "darkred")) +
+theme_minimal() +
+theme(legend.position = "bottom")
+# FORECASTING ------------------------------------------------------------
+forecast_horizon <- 8  # es. 8 anni futuri
+var_forecast <- predict(var_model, n.ahead = forecast_horizon, ci = 0.95)
+# Funzione di plotting forecast
+plot_forecast <- function(fcast, var_name) {
+fcast_df <- data.frame(
+time = seq(max(data$time) + 1, by = 1, length.out = forecast_horizon),
+forecast = fcast$fcst[[var_name]][, "fcst"],
+lower = fcast$fcst[[var_name]][, "lower"],
+upper = fcast$fcst[[var_name]][, "upper"]
+)
+ggplot(fcast_df, aes(x = time, y = forecast)) +
+geom_line(color = "darkblue", size = 1) +
+geom_ribbon(aes(ymin = lower, ymax = upper), fill = "steelblue", alpha = 0.3) +
+labs(title = paste("Forecast", var_name),
+x = "Anno", y = var_name) +
+theme_minimal()
+}
+# Plotta previsioni per ciascuna variabile
+plot_forecast(var_forecast, "inflation")
+plot_forecast(var_forecast, "unemployment")
+plot_forecast(var_forecast, "intrate")
+######################################à
+library(ggrepel)
+# Costruisci base con anni (facoltativo per etichette)
+phillips_data <- data %>%
+mutate(anno = format(time, "%Y"))
+# Modello lineare per R²
+mod_phillips <- lm(inflation ~ unemployment, data = phillips_data)
+r2 <- summary(mod_phillips)$r.squared
+# Grafico
+ggplot(phillips_data, aes(x = unemployment, y = inflation)) +
+geom_point(size = 3, color = "steelblue") +
+geom_smooth(method = "lm", se = FALSE, color = "darkred", size = 1.2) +
+geom_text_repel(aes(label = anno), size = 3.2, max.overlaps = 10, color = "gray30") +  # Etichette opzionali
+annotate("text", x = Inf, y = -Inf, hjust = 1.1, vjust = -1.5,
+label = paste0("R² = ", round(r2, 3)),
+size = 4, color = "black", fontface = "italic") +
+labs(title = "Curva di Phillips per l’Italia",
+subtitle = "Relazione tra disoccupazione e inflazione (annuale)",
+x = "Tasso di Disoccupazione (%)",
+y = "Inflazione (%)") +
+theme_minimal(base_size = 13) +
+theme(
+plot.title = element_text(face = "bold"),
+plot.subtitle = element_text(margin = margin(b = 10)),
+panel.grid.minor = element_blank()
+)
+# CURVA DI PHILLIPS ------------------------------------------------------
+ggplot(data, aes(x = unemployment, y = inflation)) +
+geom_point(color = "steelblue", size = 2) +
+geom_smooth(method = "lm", se = FALSE, color = "darkred") +
+labs(title = "Curva di Phillips",
+x = "Tasso di Disoccupazione (%)",
+y = "Inflazione (%)") +
+theme_minimal()
+# Costruisci base con anni (facoltativo per etichette)
+phillips_data <- data %>%
+mutate(anno = format(time, "%Y"))
+# Modello lineare per R²
+mod_phillips <- lm(inflation ~ unemployment, data = phillips_data)
+r2 <- summary(mod_phillips)$r.squared
+# Grafico
+ggplot(phillips_data, aes(x = unemployment, y = inflation)) +
+geom_point(size = 3, color = "steelblue") +
+geom_smooth(method = "lm", se = FALSE, color = "darkred", size = 1.2) +
+geom_text_repel(aes(label = anno), size = 3.2, max.overlaps = 10, color = "gray30") +  # Etichette opzionali
+annotate("text", x = Inf, y = -Inf, hjust = 1.1, vjust = -1.5,
+label = paste0("R² = ", round(r2, 3)),
+size = 4, color = "black", fontface = "italic") +
+labs(title = "Curva di Phillips per l’Italia",
+subtitle = "Relazione tra disoccupazione e inflazione (annuale)",
+x = "Tasso di Disoccupazione (%)",
+y = "Inflazione (%)") +
+theme_minimal(base_size = 13) +
+theme(
+plot.title = element_text(face = "bold"),
+plot.subtitle = element_text(margin = margin(b = 10)),
+panel.grid.minor = element_blank()
+)
+rm(list = ls())
+packages <- c("vars","tidyr","dplyr","ggplot2","mFilter","zoo","seasonal","readxl", "tseries")
+for (pkg in packages) {
+if (!requireNamespace(pkg, quietly = TRUE)) {
+install.packages(pkg)
+}
+library(pkg, character.only = TRUE)
+}
+# INFLAZIONE -------------------------------------------------------------
+inflation <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/inflation.xlsx","Annual")
+inflation <- inflation %>% select("observation_date", "FPCPITOTLZGITA")
+names(inflation) <- c("time", "inflation")
+inflation$time <- as.yearqtr(inflation$time, format = "%Y-%m-%d")
+inflation$inflation <- as.numeric(inflation$inflation)
+inflation <- na.omit(inflation)
+ggplot(inflation, aes(x = time, y = inflation)) +
+geom_line(size = 1) +
+scale_x_yearqtr(n = 10, format = "%Y") +
+labs(title = "Inflazione", x = "Anno", y = "% annuo") +
+theme_minimal()
+# DISOCCUPAZIONE ---------------------------------------------------------
+unemployment <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/unemployment rate.xlsx","Annual")
+unemployment <- unemployment %>% select("observation_date", "LRHUTTTTITA156S")
+names(unemployment) <- c("time", "unemployment")
+unemployment$time <- as.yearqtr(unemployment$time, format = "%Y-%m-%d")
+unemployment$unemployment <- as.numeric(unemployment$unemployment)
+unemployment <- na.omit(unemployment)
+ggplot(unemployment, aes(x = time, y = unemployment)) +
+geom_line(size = 1) +
+scale_x_yearqtr(n = 10, format = "%Y") +
+labs(title = "Disoccupazione", x = "Anno", y = "% forza lavoro") +
+theme_minimal()
+# TASSO DI INTERESSE -----------------------------------------------------
+intrate <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/int rates.xlsx","Annual")
+intrate <- intrate %>% select("observation_date", "IRLTLT01ITM156N")
+names(intrate) <- c("time", "intrate")
+intrate$time <- as.yearqtr(intrate$time, format = "%Y-%m-%d")
+intrate$intrate <- as.numeric(intrate$intrate)
+intrate <- na.omit(intrate)
+ggplot(intrate, aes(x = time, y = intrate)) +
+geom_line(size = 1) +
+scale_x_yearqtr(n = 10, format = "%Y") +
+labs(title = "Tasso di Interesse", x = "Anno", y = "%") +
+theme_minimal()
+# MERGE DATI -------------------------------------------------------------
+df_list <- list(inflation, unemployment, intrate)
+data <- Reduce(function(x, y) merge(x, y, by = "time", all = TRUE), df_list)
+data <- data %>%
+filter(time >= as.yearqtr("1995 Q1") & time <= as.yearqtr("2023 Q1"))
+# STAZIONARIETÀ ----------------------------------------------------------
+library(tseries)
+# Crea serie ts per i test
+inflation_ts <- ts(data$inflation, start = as.numeric(format(min(data$time), "%Y")), frequency = 1)
+unemployment_ts <- ts(data$unemployment, start = as.numeric(format(min(data$time), "%Y")), frequency = 1)
+intrate_ts <- ts(data$intrate, start = as.numeric(format(min(data$time), "%Y")), frequency = 1)
+cat("==== ADF TEST ====\n")
+cat("Inflazione:\n"); print(adf.test(inflation_ts))
+cat("Disoccupazione:\n"); print(adf.test(unemployment_ts))
+cat("Tasso d’interesse:\n"); print(adf.test(intrate_ts))
+cat("\n==== KPSS TEST ====\n")
+cat("Inflazione:\n"); print(kpss.test(inflation_ts, null = "Level"))
+cat("Disoccupazione:\n"); print(kpss.test(unemployment_ts, null = "Level"))
+cat("Tasso d’interesse:\n"); print(kpss.test(intrate_ts, null = "Level"))
+rm(list = ls())
+packages <- c("vars","tidyr","dplyr","ggplot2","mFilter","zoo","seasonal","readxl","tseries")
+for (pkg in packages) {
+if (!requireNamespace(pkg, quietly = TRUE)) {
+install.packages(pkg)
+}
+library(pkg, character.only = TRUE)
+}
+# INFLAZIONE -------------------------------------------------------------
+inflation <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/inflation.xlsx","Annual")
+inflation <- inflation %>% select("observation_date", "FPCPITOTLZGITA")
+names(inflation) <- c("time", "inflation")
+inflation$time <- as.yearqtr(inflation$time, format = "%Y-%m-%d")
+inflation$inflation <- as.numeric(inflation$inflation)
+inflation <- na.omit(inflation)
+# DISOCCUPAZIONE ---------------------------------------------------------
+unemployment <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/unemployment rate.xlsx","Annual")
+unemployment <- unemployment %>% select("observation_date", "LRHUTTTTITA156S")
+names(unemployment) <- c("time", "unemployment")
+unemployment$time <- as.yearqtr(unemployment$time, format = "%Y-%m-%d")
+unemployment$unemployment <- as.numeric(unemployment$unemployment)
+unemployment <- na.omit(unemployment)
+# TASSO DI INTERESSE -----------------------------------------------------
+intrate <- read_excel("C:/Users/ANNA.GRIMALDI/Desktop/Var/int rates.xlsx","Annual")
+intrate <- intrate %>% select("observation_date", "IRLTLT01ITM156N")
+names(intrate) <- c("time", "intrate")
+intrate$time <- as.yearqtr(intrate$time, format = "%Y-%m-%d")
+intrate$intrate <- as.numeric(intrate$intrate)
+intrate <- na.omit(intrate)
+# MERGE DATI -------------------------------------------------------------
+df_list <- list(inflation, unemployment, intrate)
+data <- Reduce(function(x, y) merge(x, y, by = "time", all = TRUE), df_list)
+data <- data %>%
+filter(time >= as.yearqtr("1995 Q1") & time <= as.yearqtr("2023 Q1"))
+# DIFFERENZIAZIONE -------------------------------------------------------
+diff_data <- data %>%
+arrange(time) %>%
+mutate(
+d_inflation = c(NA, diff(inflation)),
+d_unemployment = c(NA, diff(unemployment)),
+d_intrate = c(NA, diff(intrate))
+) %>%
+select(time, d_inflation, d_unemployment, d_intrate) %>%
+na.omit()
+# Verifica stazionarietà delle differenze
+cat("==== ADF TEST sulle differenze ====\n")
+print(adf.test(ts(diff_data$d_inflation)))
+print(adf.test(ts(diff_data$d_unemployment)))
+print(adf.test(ts(diff_data$d_intrate)))
+cat("\n==== KPSS TEST sulle differenze ====\n")
+print(kpss.test(ts(diff_data$d_inflation), null = "Level"))
+print(kpss.test(ts(diff_data$d_unemployment), null = "Level"))
+print(kpss.test(ts(diff_data$d_intrate), null = "Level"))
+# VAR DIFFERENZIATO ------------------------------------------------------
+var_diff_data <- diff_data %>%
+select(d_inflation, d_unemployment, d_intrate)
+# VAR DIFFERENZIATO ------------------------------------------------------
+var_diff_data <- diff_data %>%
+select(d_inflation, d_unemployment, d_intrate)
+lag_selection <- VARselect(var_diff_data, lag.max = 6, type = "const")
+print(lag_selection$selection)
+var_model_diff <- VAR(var_diff_data, p = 1, type = "const")  # cambia p se necessario
+summary(var_model_diff)
+# IRF --------------------------------------------------------------------
+irf_diff_infl <- irf(var_model_diff, impulse = "d_intrate", response = "d_inflation",
+n.ahead = 10, ortho = TRUE, boot = TRUE, ci = 0.90)
+plot(irf_diff_infl)
+irf_diff_unemp <- irf(var_model_diff, impulse = "d_intrate", response = "d_unemployment",
+n.ahead = 10, ortho = TRUE, boot = TRUE, ci = 0.90)
+plot(irf_diff_unemp)
+irf_diff_rate <- irf(var_model_diff, impulse = "d_intrate", response = "d_intrate",
+n.ahead = 10, ortho = TRUE, boot = TRUE, ci = 0.90)
+plot(irf_diff_rate)
+# TAYLOR RULE ------------------------------------------------------------
+# Aggiungi nel dataset
+data <- data %>%
+mutate(taylor_rate = 2 + inflation + 0.5 * (inflation - 2) - 0.5 * (unemployment - 8))
+# Grafico comparativo
+ggplot(data, aes(x = time)) +
+geom_line(aes(y = intrate, color = "Tasso Effettivo"), size = 1) +
+geom_line(aes(y = taylor_rate, color = "Tasso secondo Taylor"), size = 1, linetype = "dashed") +
+labs(title = "Tasso d'interesse effettivo vs Taylor Rule",
+x = "Anno", y = "%") +
+scale_color_manual(values = c("Tasso Effettivo" = "steelblue", "Tasso secondo Taylor" = "darkred")) +
+theme_minimal() +
+theme(legend.position = "bottom")
+# Valori di partenza (ultimi noti)
+last_vals <- tail(data, 1) %>% select(inflation, unemployment, intrate)
+# Forecast differenziato
+fcast_diff <- var_forecast
+# Valori di partenza (ultimi noti)
+last_vals <- tail(data, 1) %>% select(inflation, unemployment, intrate)
+# Crea il forecast dalle serie differenziate (VAR stimato)
+forecast_horizon <- 8  # o un numero a tua scelta
+fcast_diff <- predict(var_model_diff, n.ahead = forecast_horizon, ci = 0.95)
+fcast_diff <- var_forecast
+# Valori di partenza (ultimi noti)
+last_vals <- tail(data, 1) %>% select(inflation, unemployment, intrate)
+# Crea il forecast dalle serie differenziate (VAR stimato)
+forecast_horizon <- 8  # o un numero a tua scelta
+fcast_diff <- predict(var_model_diff, n.ahead = forecast_horizon, ci = 0.95)
+# Ricostruzione livelli
+reconstruct_series <- function(var_name) {
+diff_vals <- fcast_diff$fcst[[paste0("d_", var_name)]][, "fcst"]
+level_vals <- numeric(length(diff_vals))
+level_vals[1] <- last_vals[[var_name]] + diff_vals[1]
+for (i in 2:length(diff_vals)) {
+level_vals[i] <- level_vals[i - 1] + diff_vals[i]
+}
+return(level_vals)
+}
+# Applica ricostruzione
+inflation_forecast <- reconstruct_series("inflation")
+unemployment_forecast <- reconstruct_series("unemployment")
+intrate_forecast <- reconstruct_series("intrate")
+# Costruisci dataframe per plot
+forecast_df <- data.frame(
+time = seq(max(data$time) + 1, by = 1, length.out = forecast_horizon),
+inflation = inflation_forecast,
+unemployment = unemployment_forecast,
+intrate = intrate_forecast
+)
+# Grafico
+forecast_df_long <- pivot_longer(forecast_df, cols = -time, names_to = "variabile", values_to = "valore")
+ggplot(forecast_df_long, aes(x = time, y = valore, color = variabile)) +
+geom_line(size = 1) +
+labs(title = "Previsioni sui livelli delle variabili",
+x = "Anno", y = "Valore previsto") +
+theme_minimal() +
+theme(legend.position = "bottom")
