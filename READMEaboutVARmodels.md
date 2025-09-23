@@ -1,0 +1,4 @@
+In this project, I studied the Italian economy between 1995 and 2023, focusing on inflation, unemployment, and interest rates. Using VAR models in both levels and differences, I explored the dynamic relationships among these variables.
+I found that higher interest rates reduce inflation but raise unemployment in the medium term, consistent with restrictive monetary policy theory. The Phillips curve showed a weak but negative relationship, and the ECB’s interest rate was often below the Taylor rule, especially after 2008, suggesting a more accommodative stance.
+Forecasts indicated stabilizing inflation, slightly declining unemployment, and rising interest rates. The differenced VAR confirmed the main results, though with greater uncertainty.
+Overall, my analysis showed that VAR models can effectively capture Italy’s macroeconomic dynamics and highlight the interplay between theory and empirical data.
