@@ -1,0 +1,285 @@
+// Runnable app schema (SQLite for zero-config dev). Production target is
+// PostgreSQL — see /oleificio-live/prisma/schema.prisma for the Postgres version.
+// SQLite has no native enums/Json, so enum-like fields are String (validated by
+// Zod + TS unions in src/lib) and JSON payloads are stored as String.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoText    String   @default("Oleificio")
+  isSuspended Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  users     User[]
+  customers Customer[]
+  machines  Machine[]
+  stages    ProcessingStage[]
+  lots      OliveLot[]
+  deliveries Delivery[]
+  auditLogs AuditLog[]
+  documents Document[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String?
+  email        String
+  passwordHash String
+  fullName     String
+  role         String // SUPER_ADMIN | MILL_ADMIN | OPERATOR
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  tenantId   String
+  fullName   String
+  email      String?
+  phone      String?
+  username   String
+  passwordHash String
+  mustChangePassword Boolean @default(true)
+  tempExpiresAt DateTime?
+  isDisabled Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  deliveries    Delivery[]
+  lots          OliveLot[]
+  notifications Notification[]
+
+  @@unique([tenantId, username])
+}
+
+model ProcessingStage {
+  id                       String  @id @default(cuid())
+  tenantId                 String
+  code                     String
+  name                     String
+  customerDescription      String?
+  orderIndex               Int
+  stageType                String  @default("CONTINUOUS") // CONTINUOUS | BATCH
+  isOptional               Boolean @default(false)
+  isEnabled                Boolean @default(true)
+  setupMinutes             Float   @default(0)
+  cleanupMinutes           Float   @default(0)
+  overlapMinutes           Float   @default(0)
+  averageMinutes           Float?
+  averageBatchDurationMinutes Float?
+  allowsParallelProcessing Boolean @default(false)
+  requiresPreviousStage    Boolean @default(true)
+  animationKey             String?
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id])
+  phases LotPhase[]
+
+  @@unique([tenantId, code])
+}
+
+model Machine {
+  id                        String   @id @default(cuid())
+  tenantId                  String
+  code                      String
+  name                      String
+  type                      String
+  stageCode                 String // which stage this machine serves
+  status                    String   @default("IDLE") // IDLE|WAITING|ACTIVE|PAUSED|ERROR|COMPLETED|MAINTENANCE
+  nominalCapacityKgPerHour  Float?
+  effectiveCapacityKgPerHour Float?
+  batchCapacityKg           Float?
+  parallelBatchCount        Int      @default(1)
+  efficiencyFactor          Float    @default(1)
+  calibrated                Boolean  @default(false)
+  currentTemperature        Float?
+  currentLotId              String?
+  telemetryEnabled          Boolean  @default(false)
+  version                   Int      @default(0)
+  createdAt                 DateTime @default(now())
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  downtimes MachineDowntime[]
+  telemetry TelemetryReading[]
+
+  @@unique([tenantId, code])
+}
+
+model MachineDowntime {
+  id        String   @id @default(cuid())
+  tenantId  String
+  machineId String
+  reason    String
+  planned   Boolean  @default(false)
+  startedAt DateTime
+  endedAt   DateTime?
+
+  machine Machine @relation(fields: [machineId], references: [id])
+}
+
+model Delivery {
+  id            String   @id @default(cuid())
+  tenantId      String
+  customerId    String
+  netWeightKg   Float
+  arrivedAt     DateTime @default(now())
+  notes         String?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  lot      OliveLot?
+}
+
+model OliveLot {
+  id                    String   @id @default(cuid())
+  tenantId              String
+  customerId            String
+  deliveryId            String?  @unique
+  publicTrackingCode    String
+  internalLotCode       String
+  status                String   @default("CREATED")
+  priority              String   @default("NORMAL") // NORMAL|HIGH|URGENT
+  oliveWeightKg         Float
+  oliveVariety          String?
+  harvestDate           DateTime?
+  arrivalDate           DateTime @default(now())
+  organicFlag           Boolean  @default(false)
+  notes                 String?
+  estimatedStartAt      DateTime?
+  estimatedCompletionAt DateTime?
+  actualStartAt         DateTime?
+  actualCompletionAt    DateTime?
+  estimatedOilLiters    Float?
+  actualOilLiters       Float?
+  yieldPercentage       Float?
+  currentStageCode      String?
+  currentMachineId      String?
+  progressPercentage    Float    @default(0)
+  etaConfidence         String   @default("MEDIUM")
+  etaLowAt              DateTime?
+  etaHighAt             DateTime?
+  etaUpdatedAt          DateTime?
+  queuePosition         Int      @default(0)
+  version               Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  delivery      Delivery?      @relation(fields: [deliveryId], references: [id])
+  phases        LotPhase[]
+  documents     Document[]
+  notifications Notification[]
+
+  @@unique([tenantId, publicTrackingCode])
+  @@unique([tenantId, internalLotCode])
+}
+
+model LotPhase {
+  id            String    @id @default(cuid())
+  tenantId      String
+  lotId         String
+  stageId       String
+  stageCode     String
+  machineId     String?
+  status        String    @default("PENDING")
+  orderIndex    Int
+  estimatedMinutes Float?
+  estimatedStartAt DateTime?
+  estimatedEndAt   DateTime?
+  actualStartAt    DateTime?
+  actualEndAt      DateTime?
+  numberOfBatches  Int?
+  version       Int       @default(0)
+
+  lot   OliveLot        @relation(fields: [lotId], references: [id])
+  stage ProcessingStage @relation(fields: [stageId], references: [id])
+}
+
+model TelemetryReading {
+  id             String   @id @default(cuid())
+  tenantId       String
+  machineId      String
+  lotId          String?
+  metric         String
+  numericValue   Float?
+  unit           String?
+  quality        String   @default("GOOD")
+  sourceTimestamp DateTime
+  receivedAt     DateTime @default(now())
+
+  machine Machine @relation(fields: [machineId], references: [id])
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  tenantId   String
+  lotId      String?
+  kind       String
+  fileName   String
+  visibleToCustomer Boolean @default(false)
+  createdAt  DateTime @default(now())
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id])
+  lot    OliveLot? @relation(fields: [lotId], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String?
+  lotId      String?
+  channel    String   @default("IN_APP")
+  eventType  String
+  dedupeKey  String   @unique
+  title      String
+  body       String
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+  lot      OliveLot? @relation(fields: [lotId], references: [id])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  eventId       String   @unique
+  tenantId      String
+  lotId         String?
+  machineId     String?
+  eventType     String
+  actorType     String
+  actorId       String?
+  source        String
+  payload       String   @default("{}")
+  correlationId String?
+  previousState String?
+  newState      String?
+  timestamp     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  subjectId String // userId or customerId
+  subjectType String // USER | CUSTOMER
+  tenantId  String?
+  role      String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+}

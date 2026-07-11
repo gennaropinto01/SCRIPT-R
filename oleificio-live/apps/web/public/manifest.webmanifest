@@ -1,0 +1,11 @@
+{
+  "name": "Oleificio Live",
+  "short_name": "Oleificio",
+  "description": "Segui la lavorazione delle tue olive in tempo reale.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1d2731",
+  "theme_color": "#65701f",
+  "lang": "it",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

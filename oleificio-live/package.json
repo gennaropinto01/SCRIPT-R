@@ -1,0 +1,17 @@
+{
+  "name": "oleificio-live",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Oleificio Live — production tracking for an olive-oil mill (customer + operator portals).",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}
