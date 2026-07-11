@@ -1,0 +1,637 @@
+// Oleificio Live — initial Prisma schema (Phase 1)
+// Every operational model carries tenantId. Mutable operational models carry
+// a `version` column for optimistic locking. AuditLog is append-only.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum UserRole {
+  SUPER_ADMIN
+  MILL_ADMIN
+  OPERATOR
+}
+
+enum LotStatus {
+  CREATED
+  ACCEPTED
+  QUEUED
+  SCHEDULED
+  IN_PROGRESS
+  PAUSED
+  BLOCKED
+  QUALITY_CHECK
+  COMPLETED
+  READY_FOR_PICKUP
+  DELIVERED
+  CANCELLED
+}
+
+enum PhaseStatus {
+  PENDING
+  WAITING
+  READY
+  RUNNING
+  PAUSED
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum StageType {
+  CONTINUOUS
+  BATCH
+}
+
+enum LotPriority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum MachineStatus {
+  IDLE
+  WAITING
+  ACTIVE
+  PAUSED
+  ERROR
+  COMPLETED
+  MAINTENANCE
+}
+
+enum TelemetryQuality {
+  GOOD
+  UNCERTAIN
+  BAD
+}
+
+enum EtaConfidence {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ActorType {
+  SYSTEM
+  SUPER_ADMIN
+  MILL_ADMIN
+  OPERATOR
+  CUSTOMER
+  TELEMETRY
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+// ---------- Tenancy & identity ----------
+
+model Tenant {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  isSuspended  Boolean  @default(false)
+  settings     Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users        User[]
+  customers    Customer[]
+  machines     Machine[]
+  stages       ProcessingStage[]
+  lots         OliveLot[]
+  deliveries   Delivery[]
+  queues       ProductionQueue[]
+  auditLogs    AuditLog[]
+  documents    Document[]
+  notifications Notification[]
+  settingsRows SystemSetting[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  tenantId      String?   // null only for SUPER_ADMIN (global)
+  email         String
+  passwordHash  String
+  role          UserRole
+  isActive      Boolean   @default(true)
+  twoFactorEnabled Boolean @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id])
+  refreshTokens RefreshToken[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Permission {
+  id    String @id @default(cuid())
+  code  String @unique
+  label String
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  tenantId    String
+  fullName    String
+  email       String?
+  phone       String?
+  taxCode     String?
+  isDisabled  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  credentials  CustomerCredential[]
+  sessions     CustomerSession[]
+  deliveries   Delivery[]
+  lots         OliveLot[]
+  notifications Notification[]
+  preferences  NotificationPreference[]
+
+  @@index([tenantId])
+}
+
+model CustomerCredential {
+  id                  String    @id @default(cuid())
+  tenantId            String
+  customerId          String
+  username            String
+  passwordHash        String
+  isTemporary         Boolean   @default(true)
+  temporaryExpiresAt  DateTime?
+  mustChangePassword  Boolean   @default(true)
+  activationToken     String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([tenantId, username])
+  @@index([tenantId, customerId])
+}
+
+model CustomerSession {
+  id           String   @id @default(cuid())
+  tenantId     String
+  customerId   String
+  refreshHash  String
+  userAgent    String?
+  ip           String?
+  revokedAt    DateTime?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, customerId])
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String
+  revokedAt  DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id         String    @id @default(cuid())
+  tenantId   String?
+  identifier String
+  success    Boolean
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  @@index([identifier, createdAt])
+}
+
+// ---------- Plant configuration ----------
+
+model ProcessingStage {
+  id                       String    @id @default(cuid())
+  tenantId                 String
+  code                     String
+  name                     String
+  customerDescription      String?
+  internalDescription      String?
+  orderIndex               Int
+  stageType                StageType @default(CONTINUOUS)
+  isOptional               Boolean   @default(false)
+  isEnabled                Boolean   @default(true)
+  defaultMinMinutes        Float?
+  defaultAverageMinutes    Float?
+  defaultMaxMinutes        Float?
+  setupMinutes             Float     @default(0)
+  cleanupMinutes           Float     @default(0)
+  allowsParallelProcessing Boolean   @default(false)
+  requiresPreviousStage    Boolean   @default(true)
+  maxConcurrentLots        Int       @default(1)
+  animationKey             String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  capabilities MachineStageCapability[]
+  lotPhases    LotPhase[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, orderIndex])
+}
+
+model Machine {
+  id                        String        @id @default(cuid())
+  tenantId                  String
+  code                      String
+  name                      String
+  type                      String
+  status                    MachineStatus @default(IDLE)
+  nominalCapacityKgPerHour  Float?
+  effectiveCapacityKgPerHour Float?
+  batchCapacityKg           Float?
+  parallelBatchCount        Int           @default(1)
+  efficiencyFactor          Float         @default(1)
+  currentTemperature        Float?
+  currentLotId              String?
+  lastMaintenanceAt         DateTime?
+  nextMaintenanceAt         DateTime?
+  telemetryEnabled          Boolean       @default(false)
+  telemetrySource           Json?         // per-tenant mapping; blank until mill provides it
+  version                   Int           @default(0)
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  capabilities MachineStageCapability[]
+  downtimes    MachineDowntime[]
+  telemetry    TelemetryReading[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model MachineStageCapability {
+  id                        String  @id @default(cuid())
+  tenantId                  String
+  machineId                 String
+  stageId                   String
+  nominalCapacityKgPerHour  Float?
+  minCapacityKgPerHour      Float?
+  maxCapacityKgPerHour      Float?
+  batchCapacityKg           Float?
+  averageBatchDurationMinutes Float?
+  setupMinutes              Float   @default(0)
+  cleanupMinutes            Float   @default(0)
+
+  machine Machine         @relation(fields: [machineId], references: [id])
+  stage   ProcessingStage @relation(fields: [stageId], references: [id])
+
+  @@unique([machineId, stageId])
+  @@index([tenantId])
+}
+
+model MachineDowntime {
+  id          String    @id @default(cuid())
+  tenantId    String
+  machineId   String
+  reason      String
+  planned     Boolean   @default(false)
+  startedAt   DateTime
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  @@index([tenantId, machineId])
+}
+
+// ---------- Deliveries & lots ----------
+
+model Delivery {
+  id            String   @id @default(cuid())
+  tenantId      String
+  customerId    String
+  grossWeightKg Float
+  tareWeightKg  Float    @default(0)
+  netWeightKg   Float
+  arrivedAt     DateTime @default(now())
+  registeredBy  String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  lot      OliveLot?
+
+  @@index([tenantId, customerId])
+}
+
+model OliveLot {
+  id                    String       @id @default(cuid())
+  tenantId              String
+  customerId            String
+  deliveryId            String?      @unique
+  publicTrackingCode    String
+  internalLotCode       String
+  status                LotStatus    @default(CREATED)
+  priority              LotPriority  @default(NORMAL)
+  oliveWeightKg         Float
+  oliveVariety          String?
+  harvestDate           DateTime?
+  arrivalDate           DateTime     @default(now())
+  origin                String?
+  organicFlag           Boolean      @default(false)
+  notes                 String?
+  estimatedStartAt      DateTime?
+  estimatedCompletionAt DateTime?
+  actualStartAt         DateTime?
+  actualCompletionAt    DateTime?
+  estimatedOilLiters    Float?
+  actualOilLiters       Float?
+  yieldPercentage       Float?
+  currentStageId        String?
+  currentMachineId      String?
+  progressPercentage    Float        @default(0)
+  version               Int          @default(0)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  customer      Customer @relation(fields: [customerId], references: [id])
+  delivery      Delivery? @relation(fields: [deliveryId], references: [id])
+  phases        LotPhase[]
+  progressEvents PhaseProgressEvent[]
+  etaCalculations EtaCalculation[]
+  quality       QualityMeasurement[]
+  oilOutput     OilOutput?
+  documents     Document[]
+  queueEntry    QueueEntry?
+
+  @@unique([tenantId, publicTrackingCode])
+  @@unique([tenantId, internalLotCode])
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+}
+
+model LotPhase {
+  id            String      @id @default(cuid())
+  tenantId      String
+  lotId         String
+  stageId       String
+  machineId     String?
+  status        PhaseStatus @default(PENDING)
+  orderIndex    Int
+  estimatedMinutes Float?
+  estimatedStartAt DateTime?
+  estimatedEndAt   DateTime?
+  actualStartAt    DateTime?
+  actualEndAt      DateTime?
+  numberOfBatches  Int?
+  version       Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  lot   OliveLot        @relation(fields: [lotId], references: [id])
+  stage ProcessingStage @relation(fields: [stageId], references: [id])
+
+  @@index([tenantId, lotId])
+  @@index([tenantId, status])
+}
+
+// ---------- Queue ----------
+
+model ProductionQueue {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String   @default("default")
+  createdAt DateTime @default(now())
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id])
+  entries QueueEntry[]
+
+  @@index([tenantId])
+}
+
+model QueueEntry {
+  id        String      @id @default(cuid())
+  tenantId  String
+  queueId   String
+  lotId     String      @unique
+  position  Int
+  priority  LotPriority @default(NORMAL)
+  locked    Boolean     @default(false)
+  version   Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  queue ProductionQueue @relation(fields: [queueId], references: [id])
+  lot   OliveLot        @relation(fields: [lotId], references: [id])
+
+  @@index([tenantId, queueId, position])
+}
+
+// ---------- Telemetry, progress, ETA ----------
+
+model TelemetryReading {
+  id             String           @id @default(cuid())
+  tenantId       String
+  machineId      String
+  lotId          String?
+  metric         String
+  numericValue   Float?
+  textValue      String?
+  unit           String?
+  quality        TelemetryQuality @default(GOOD)
+  sourceTimestamp DateTime
+  receivedAt     DateTime         @default(now())
+
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  @@index([tenantId, machineId, metric, sourceTimestamp])
+}
+
+model PhaseProgressEvent {
+  id            String   @id @default(cuid())
+  tenantId      String
+  lotId         String
+  stageId       String
+  progressFraction Float
+  source        String   // "TIME" | "TELEMETRY" | "MANUAL"
+  recordedAt    DateTime @default(now())
+
+  lot OliveLot @relation(fields: [lotId], references: [id])
+
+  @@index([tenantId, lotId, recordedAt])
+}
+
+model EtaCalculation {
+  id            String        @id @default(cuid())
+  tenantId      String
+  lotId         String
+  stageId       String?
+  lowAt         DateTime
+  highAt        DateTime
+  confidence    EtaConfidence
+  basis         String        // "TIME" | "TELEMETRY"
+  inputs        Json          // snapshot of inputs for explainability
+  computedAt    DateTime      @default(now())
+
+  lot OliveLot @relation(fields: [lotId], references: [id])
+
+  @@index([tenantId, lotId, computedAt])
+}
+
+// ---------- Quality, output, containers ----------
+
+model QualityMeasurement {
+  id           String   @id @default(cuid())
+  tenantId     String
+  lotId        String
+  metric       String
+  numericValue Float?
+  textValue    String?
+  unit         String?
+  recordedBy   String?
+  recordedAt   DateTime @default(now())
+
+  lot OliveLot @relation(fields: [lotId], references: [id])
+
+  @@index([tenantId, lotId])
+}
+
+model OilOutput {
+  id             String   @id @default(cuid())
+  tenantId       String
+  lotId          String   @unique
+  liters         Float?
+  weightKg       Float?
+  yieldPercentage Float?
+  recordedBy     String?
+  recordedAt     DateTime @default(now())
+
+  lot        OliveLot    @relation(fields: [lotId], references: [id])
+  containers Container[]
+}
+
+model Container {
+  id          String   @id @default(cuid())
+  tenantId    String
+  oilOutputId String
+  type        String
+  capacityL   Float?
+  filledL     Float?
+  label       String?
+
+  oilOutput OilOutput @relation(fields: [oilOutputId], references: [id])
+
+  @@index([tenantId])
+}
+
+// ---------- Documents & notifications ----------
+
+model Document {
+  id          String   @id @default(cuid())
+  tenantId    String
+  lotId       String?
+  customerId  String?
+  kind        String   // "RECEIPT" | "RESULT" | "OTHER"
+  fileName    String
+  objectKey   String   // S3 key, tenant-prefixed
+  contentType String
+  sizeBytes   Int
+  visibleToCustomer Boolean @default(false)
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id])
+  lot    OliveLot? @relation(fields: [lotId], references: [id])
+
+  @@index([tenantId, lotId])
+}
+
+model Notification {
+  id           String              @id @default(cuid())
+  tenantId     String
+  customerId   String?
+  lotId        String?
+  channel      NotificationChannel @default(IN_APP)
+  eventType    String
+  dedupeKey    String              // idempotency: (eventId, channel)
+  title        String
+  body         String
+  readAt       DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime            @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@unique([dedupeKey, channel])
+  @@index([tenantId, customerId])
+}
+
+model NotificationPreference {
+  id         String              @id @default(cuid())
+  tenantId   String
+  customerId String
+  channel    NotificationChannel
+  enabled    Boolean             @default(true)
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@unique([customerId, channel])
+  @@index([tenantId, customerId])
+}
+
+// ---------- Audit & settings ----------
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  eventId       String    @unique
+  tenantId      String
+  lotId         String?
+  machineId     String?
+  eventType     String
+  actorType     ActorType
+  actorId       String?
+  source        String
+  payload       Json
+  correlationId String?
+  previousState String?
+  newState      String?
+  timestamp     DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, timestamp])
+  @@index([tenantId, lotId])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  tenantId  String?  // null = global
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+}
