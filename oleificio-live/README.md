@@ -17,15 +17,16 @@ This repository is being built in the ordered phases from the project brief.
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 1 | Analysis & architecture: docs, ADRs, Mermaid diagrams, initial Prisma schema, monorepo structure, concrete API spec, **and a working, tested ETA engine** | ✅ Delivered |
-| 2 | Foundation: DB, auth, tenants, roles, permissions, migrations, seed, Docker Compose, env | ⏳ Scaffolded (compose + schema + env ready) |
-| 3 | Operational backend: customers, deliveries, lots, phases, machines, queue, states, audit, ETA wiring, mock telemetry, API, realtime | ▫️ Specified |
-| 4 | Operator dashboard | ▫️ Specified |
-| 5 | Customer portal | ▫️ Specified |
-| 6 | 3D visualisation | ▫️ Specified |
-| 7 | Tests & hardening | ▫️ Specified |
+| 1 | Analysis & architecture: docs, ADRs, Mermaid diagrams, Prisma schema, monorepo, API spec, **tested ETA engine** | ✅ Delivered |
+| 2 | Foundation: DB, auth, tenants, roles, migrations, seed, env | ✅ Implemented (`apps/web`) |
+| 3 | Operational backend: customers, deliveries, lots, phases, machines, queue, states, audit, ETA wiring, telemetry (seed), API | ✅ Implemented |
+| 4 | Operator dashboard | ✅ Implemented |
+| 5 | Customer portal | ✅ Implemented |
+| 6 | 3D visualisation (procedural R3F + 2D fallback) | ✅ Implemented |
+| 7 | Tests & hardening | ◐ Core done (engine + state-machine tests, RBAC/tenant isolation verified); full E2E/monitoring pending |
 
-See `docs/` for the full Phase 1 deliverables.
+The **running application** is in `apps/web` — see its README to start it.
+`docs/` holds the full Phase 1 architecture set.
 
 ## Phase 1 deliverables
 
