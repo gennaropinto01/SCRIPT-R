@@ -1,6 +1,6 @@
 "use client";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Environment } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
 
@@ -101,10 +101,12 @@ export default function Scene3D({ animationKey, label, progress, state }: { anim
       {/* Text alternative for screen readers */}
       <span className="sr-only">Vista 3D della fase {label}. Stato {state}. Avanzamento {Math.round(progress * 100)} percento.</span>
       <Canvas shadows camera={{ position: [4, 3, 5], fov: 45 }} dpr={[1, 1.5]}>
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[5, 6, 4]} intensity={1} castShadow />
+        {/* Lights only — no external HDR environment, so the scene is fully
+            self-contained and works behind a strict CSP. */}
+        <ambientLight intensity={0.7} />
+        <directionalLight position={[5, 6, 4]} intensity={1.1} castShadow />
+        <directionalLight position={[-4, 2, -3]} intensity={0.4} />
         <Machine animationKey={animationKey} progress={progress} active={active} color={color} />
-        <Environment preset="warehouse" />
         <OrbitControls enablePan={false} minDistance={4} maxDistance={9} enableDamping />
       </Canvas>
     </div>
