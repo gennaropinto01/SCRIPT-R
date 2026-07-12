@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { EtaBadge, ProgressBar, Timeline, apiGet, LogoutButton } from "./ui";
 
-const Scene3D = dynamic(() => import("./Scene3D"), { ssr: false, loading: () => <div className="h-full w-full rounded-2xl bg-steel-700 animate-pulse" /> });
+const PlantView = dynamic(() => import("./PlantView"), { ssr: false, loading: () => <div className="h-full w-full rounded-2xl bg-steel-700 animate-pulse" /> });
 
 interface LotSummary { id: string; trackingCode: string; statusLabel: string; weightKg: number; variety?: string | null; progress: number; }
 interface LotDetail {
@@ -12,7 +12,7 @@ interface LotDetail {
   currentStage: { code: string; name: string; description?: string | null; animationKey?: string | null } | null;
   eta: { lowAt?: string | null; highAt?: string | null; confidence: string; updatedAt?: string | null };
   result: { oilLiters?: number | null; yieldPercentage?: number | null; completedAt?: string | null; estimatedOilLiters?: number | null };
-  timeline: Array<{ stageCode: string; name: string; status: string; numberOfBatches?: number | null }>;
+  timeline: Array<{ stageCode: string; name: string; status: string; numberOfBatches?: number | null; estimatedStartAt?: string | null; estimatedEndAt?: string | null }>;
 }
 interface Notif { id: string; title: string; body: string; createdAt: string; readAt: string | null; }
 
@@ -74,24 +74,24 @@ export default function CustomerDashboard({ customerName, millName }: { customer
             <div className="mt-4"><EtaBadge lowAt={lot.eta.lowAt} highAt={lot.eta.highAt} confidence={lot.eta.confidence} updatedAt={lot.eta.updatedAt} /></div>
           </section>
 
-          <section className="grid md:grid-cols-2 gap-4">
-            <div className="card h-72 md:h-80 p-0 overflow-hidden">
-              <Scene3D
-                animationKey={lot.currentStage?.animationKey ?? "storage"}
-                label={lot.currentStage?.name ?? lot.statusLabel}
-                progress={lot.progress / 100}
-                state={lot.status}
-              />
-            </div>
-            <div className="card">
-              <p className="label mb-2">Cosa sta succedendo</p>
-              <p className="text-steel-600 dark:text-steel-200 min-h-[3rem]">
-                {lot.currentStage?.description ?? (lot.status === "COMPLETED" ? "La lavorazione è completata: consulta il riepilogo qui sotto." : "Il lotto è in coda di lavorazione.")}
-              </p>
-              <hr className="my-4 border-steel-200/60" />
-              <p className="label mb-2">Timeline</p>
-              <Timeline phases={lot.timeline} />
-            </div>
+          <section className="card p-0 overflow-hidden">
+            <PlantView
+              stageCode={lot.currentStage?.code ?? null}
+              progress={lot.progress}
+              status={lot.status}
+              activeStartAt={lot.timeline.find((p) => p.status === "RUNNING")?.estimatedStartAt ?? null}
+              activeEndAt={lot.timeline.find((p) => p.status === "RUNNING")?.estimatedEndAt ?? null}
+            />
+          </section>
+
+          <section className="card">
+            <p className="label mb-2">Cosa sta succedendo</p>
+            <p className="text-steel-600 dark:text-steel-200 min-h-[3rem]">
+              {lot.currentStage?.description ?? (lot.status === "COMPLETED" ? "La lavorazione è completata: consulta il riepilogo qui sotto." : "Il lotto è in coda di lavorazione.")}
+            </p>
+            <hr className="my-4 border-steel-200/60" />
+            <p className="label mb-2">Timeline</p>
+            <Timeline phases={lot.timeline} />
           </section>
 
           {(lot.status === "COMPLETED" || lot.result.oilLiters) && (

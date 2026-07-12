@@ -1,7 +1,6 @@
 import {
   simulateLine,
   toEtaWindow,
-  lotProgressPercentage,
   type LotInput,
   type MachineConfig,
   type StageConfig,
@@ -91,12 +90,38 @@ export async function recomputeTenantEta(
   const schedules = simulateLine(lots, stages, machines, now);
   const byLot = new Map<string, LotSchedule>(schedules.map((s) => [s.lotId, s]));
 
+  // Progress is derived from ACTUAL phase completion (not the forward-looking
+  // schedule, which restarts from `now`), so an in-progress lot with completed
+  // phases reports real advancement.
+  const allPhases = await db.lotPhase.findMany({ where: { tenantId, lotId: { in: lotsDb.map((l) => l.id) } } });
+  const phasesByLot = new Map<string, typeof allPhases>();
+  for (const p of allPhases) {
+    const arr = phasesByLot.get(p.lotId) ?? [];
+    arr.push(p);
+    phasesByLot.set(p.lotId, arr);
+  }
+  const computeProgress = (lotId: string): number => {
+    const phases = phasesByLot.get(lotId) ?? [];
+    if (phases.length === 0) return 0;
+    let done = 0;
+    for (const p of phases) {
+      if (p.status === "COMPLETED" || p.status === "SKIPPED") done += 1;
+      else if (p.status === "RUNNING") {
+        if (p.actualStartAt && p.estimatedMinutes && p.estimatedMinutes > 0) {
+          const elapsedMin = (now - p.actualStartAt.getTime()) / 60000;
+          done += Math.min(1, Math.max(0, elapsedMin / p.estimatedMinutes));
+        } else done += 0.5;
+      }
+    }
+    return Math.round((done / phases.length) * 100);
+  };
+
   const safeDate = (ms: number): Date | null => (Number.isFinite(ms) ? new Date(ms) : null);
 
   for (const lot of lotsDb) {
     const sched = byLot.get(lot.id);
     if (!sched) continue;
-    const progress = lot.status === "IN_PROGRESS" ? lotProgressPercentage(sched, now) : lot.progressPercentage;
+    const progress = lot.status === "IN_PROGRESS" || lot.status === "PAUSED" ? computeProgress(lot.id) : lot.progressPercentage;
 
     // An indefinite downtime blocking a required machine makes completion
     // genuinely unknown → persist null ETA with LOW confidence, never a bad date.
